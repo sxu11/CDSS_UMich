@@ -27,12 +27,16 @@ import prepareData_UMich
 
 
 class LabNormalityPredictionPipeline(SupervisedLearningPipeline):
-    def __init__(self, lab_panel, num_episodes, use_cache=None, random_state=None, isLabPanel=True):
+    def __init__(self, lab_panel, num_episodes, use_cache=None, random_state=None, isLabPanel=True,
+                 notUsePatIds=[], pat_batch_ind=None):
+        self.notUsePatIds = notUsePatIds
+        self.pat_batch_ind = pat_batch_ind
+        self.usedPatIds = []
         SupervisedLearningPipeline.__init__(self, lab_panel, num_episodes, use_cache, random_state, isLabPanel)
         self._factory = FeatureMatrixFactory()
         self._build_raw_feature_matrix()
-        self._build_processed_feature_matrix()
-        self._train_and_analyze_predictors()
+        #self._build_processed_feature_matrix()
+        #self._train_and_analyze_predictors()
 
     def _build_model_dump_path(self, algorithm):
         template = '%s' + '-normality-%s-model.pkl' % algorithm
@@ -41,7 +45,10 @@ class LabNormalityPredictionPipeline(SupervisedLearningPipeline):
             pipeline_file_name)
 
     def _build_raw_matrix_path(self):
-        template = '%s-normality-matrix-%d-episodes-raw.tab'
+        if not self.pat_batch_ind:
+            template = '%s-normality-matrix-%d-episodes-raw.tab'
+        else:
+            template = '%s-normality-matrix-%d-episodes-raw-'+str(self.pat_batch_ind)+'.tab'
         pipeline_file_name = inspect.getfile(inspect.currentframe())
         return SupervisedLearningPipeline._build_matrix_path(self, template, \
             pipeline_file_name)
@@ -113,11 +120,7 @@ class LabNormalityPredictionPipeline(SupervisedLearningPipeline):
 
         selection_problem = FeatureSelector.CLASSIFICATION
         selection_algorithm = FeatureSelector.RECURSIVE_ELIMINATION
-        if LocalEnv.DATASET_SOURCE_NAME == 'STRIDE':
-            percent_features_to_select = 0.05
-        elif LocalEnv.DATASET_SOURCE_NAME == 'UMich':
-            # This increased percentage roughly compensates for Vitals and Teams
-            percent_features_to_select = 0.08
+        percent_features_to_select = 0.05
         matrix_class = LabNormalityMatrix
         pipeline_file_path = inspect.getfile(inspect.currentframe())
         random_state = self._random_state
@@ -313,39 +316,55 @@ if __name__ == '__main__':
 
     elif LocalEnv.DATASET_SOURCE_NAME == 'UMich':
         UMICH_TOP_LABPANELS = ['CBCP']
-        UMICH_TOP_COMPONENTS = ['WBC', 'HGB', 'PLT', 'SOD', 'POT',  # TODO: confirm again
-                                'CREAT', 'TBIL',
-                                'CHLOR', 'CO2', 'DBIL', 'AST', 'ALT',
-                                'ALB', 'CAL', 'PCOAA2', 'PO2AA', 'pHA',
-                                'T PROTEIN',
-                                'ALK',  # ALKALINE PHOSPHATASE
-                                'UN',  # Blood, Urine, 'BUN'
-                                'IBIL',  # Bilirubin, Indirect
-                                'HCO3-A',  # # good, from 'LABMETB'
-                                'MAG',
-                                'PHOS',
-                                'INR',
-                                "BLD", "ICAL", "LACA"
-                                ]
+        batch_mode = False
+
+        if not batch_mode:
+            UMICH_TOP_COMPONENTS = ['WBC', 'HGB', 'PLT', 'SOD', 'POT',  # TODO: confirm again
+                                    'CREAT', 'TBIL',
+                                    'CHLOR', 'CO2', 'DBIL', 'AST', 'ALT',
+                                    'ALB', 'CAL', 'PCOAA2', 'PO2AA', 'pHA',
+                                    'T PROTEIN',
+                                    'ALK',  # ALKALINE PHOSPHATASE
+                                    'UN',  # Blood, Urine, 'BUN'
+                                    'IBIL',  # Bilirubin, Indirect
+                                    'HCO3-A',  # # good, from 'LABMETB'
+                                    'MAG',
+                                    'PHOS',
+                                    'INR',
+                                    "BLD", "ICAL", "LACA"
+                                    ]
+        else:
+            import sys
+            UMICH_TOP_COMPONENTS = [sys.argv[1]]
         # By default, the first one should be labs
-        raw_data_files = ['labs.sample.txt',
-                          'pt.info.sample.txt',
-                          'encounters.sample.txt',
-                          'demographics.sample.txt',
-                          'diagnoses.sample.txt']
+        raw_data_files = ['labs.txt',
+                          'pt.info.txt',
+                          'encounters.txt',
+                          'demographics.txt',
+                          'diagnoses.txt']
 
         raw_data_folderpath = LocalEnv.LOCAL_PROD_DB_PARAM["DATAPATH"]
         db_name = LocalEnv.LOCAL_PROD_DB_PARAM["DSN"]
         # prepareData_UMich.prepare_database(raw_data_files, raw_data_folderpath, db_name=db_name)
         fold_enlarge_data = 1
-        USE_CACHED_DB = False # TODO: take care of USE_CACHED_LARGEFILE in the future
+        USE_CACHED_DB = True # TODO: take care of USE_CACHED_LARGEFILE in the future
         prepareData_UMich.prepare_database(raw_data_files, raw_data_folderpath, db_name=db_name, fold_enlarge_data=fold_enlarge_data, USE_CACHED_DB=USE_CACHED_DB)
 
         # for panel in UMICH_TOP_LABPANELS:
         #     LabNormalityPredictionPipeline(panel, 1000, use_cache=True, random_state=123456789, isLabPanel=True)
         for component in UMICH_TOP_COMPONENTS:
+            print "processing %s..."%component
+            pat_batch_mode = True
             try:
-                LabNormalityPredictionPipeline(component, 10000, use_cache=False, random_state=123456789, isLabPanel=False)
+                if not pat_batch_mode:
+                    LabNormalityPredictionPipeline(component, 10000, use_cache=False, random_state=123456789, isLabPanel=False)
+                else:
+                    pat_batch_size = 500
+                    notUsePatIds = []
+                    for pat_batch_ind in range(10000/pat_batch_size): #10000
+                        cur_pipe = LabNormalityPredictionPipeline(component, pat_batch_size, use_cache=False, random_state=123456789,
+                                                       isLabPanel=False, notUsePatIds=notUsePatIds, pat_batch_ind=pat_batch_ind)
+                        notUsePatIds += cur_pipe.usedPatIds
             except Exception as e:
                 log.info(e)
                 pass

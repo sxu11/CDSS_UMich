@@ -21,10 +21,12 @@ from medinfo.dataconversion.FeatureMatrix import FeatureMatrix
 import LocalEnv
 
 class LabNormalityMatrix(FeatureMatrix):
-    def __init__(self, lab_var, num_episodes, random_state=None, isLabPanel=True):
+    def __init__(self, lab_var, num_episodes, random_state=None, isLabPanel=True, notUsePatIds=[]):
         FeatureMatrix.__init__(self, lab_var, num_episodes)
 
         self._isLabPanel = isLabPanel
+        self.notUsePatIds = notUsePatIds
+        self.usedPatIds = []
         if isLabPanel:
             self._varTypeInTable = 'proc_code'
         else:
@@ -165,17 +167,34 @@ class LabNormalityMatrix(FeatureMatrix):
         elif LocalEnv.DATASET_SOURCE_NAME == 'UMich':
 
             # Get average number of results for this lab test per patient.
-            query = SQLQuery()
-            query.addSelect('CAST(pat_id AS BIGINT) AS pat_id')
-            query.addSelect('COUNT(order_proc_id) AS num_orders')
-            query.addFrom('labs')
-            query.addWhereIn(self._varTypeInTable, [self._lab_var])
-            components = self._get_components_in_lab_panel()
-            query.addWhereIn("base_name", components)
-            query.addGroupBy('pat_id')
+            # query = SQLQuery()
+            # query.addSelect('CAST(pat_id AS BIGINT) AS pat_id')
+            # query.addSelect('COUNT(order_proc_id) AS num_orders')
+            # query.addFrom('labs')
+            # query.addWhereIn(self._varTypeInTable, [self._lab_var])
+            # components = self._get_components_in_lab_panel()
+            # query.addWhereIn("base_name", components)
+            #
+            # if self.notUsePatIds:
+            #     query.addWhereNotIn("pat_id", self.notUsePatIds)
+            #
+            # query.addGroupBy('pat_id')
+
+            query_str = "SELECT CAST(pat_id AS BIGINT) AS pat_id , "
+            query_str += "COUNT(order_proc_id) AS num_orders "
+            query_str += "FROM labs "
+            #query_str += " WHERE %s IN (%s) "%(self._varTypeInTable, self._lab_var)
+            query_str += "WHERE base_name == '%s' "%self._lab_var
+            if self.notUsePatIds:
+                query_str += "AND pat_id NOT IN ("
+                for pat_id in self.notUsePatIds:
+                    query_str += "%s,"%pat_id
+                query_str = query_str[:-1] + ") " # get rid of comma
+            query_str += "GROUP BY pat_id"
+
             log.debug('Querying median orders per patient...')
 
-            results = DBUtil.execute(query)
+            results = DBUtil.execute(query_str)
             order_counts = [ row[1] for row in results ]
 
             if len(results) == 0:
@@ -206,6 +225,7 @@ class LabNormalityMatrix(FeatureMatrix):
         # Build parameters for query.
         self._lab_components = self._get_components_in_lab_panel()
         random_patient_list = self._get_random_patient_list()
+        self.usedPatIds = random_patient_list[:]
 
         # Build SQL query for list of patient episodes.
         # Note that for 2008-2014 data, result_flag can take on any of the
@@ -232,8 +252,9 @@ class LabNormalityMatrix(FeatureMatrix):
         #           metabolic components. Include it.
         # High Panic: 8084 lab components can have this flag, many core
         #           metabolic components. Include it.
-        query = SQLQuery()
+
         if LocalEnv.DATASET_SOURCE_NAME=='STRIDE': # TODO: component
+            query = SQLQuery()
             query.addSelect('CAST(pat_id AS BIGINT)')
             query.addSelect('sop.order_proc_id AS order_proc_id')
             query.addSelect('proc_code') #TODO:sx
@@ -257,39 +278,62 @@ class LabNormalityMatrix(FeatureMatrix):
             query.addOrderBy('sop.order_proc_id') #sx
             query.addOrderBy('proc_code') #sx
             query.addOrderBy('order_time')
+            query.setLimit(self._num_requested_episodes)
+
+            self._num_reported_episodes = FeatureMatrix._query_patient_episodes(self, query,
+                                                                                index_time_col='order_time')
 
         elif LocalEnv.DATASET_SOURCE_NAME=='UMich':
-            query.addSelect('CAST(pat_id AS BIGINT) AS pat_id')
-            query.addSelect('order_proc_id')
-            query.addSelect(self._varTypeInTable)
-            query.addSelect('order_time')
+            # query = SQLQuery()
+            # query.addSelect('CAST(pat_id AS BIGINT) AS pat_id')
+            # query.addSelect('order_proc_id')
+            # query.addSelect(self._varTypeInTable)
+            # query.addSelect('order_time')
+            #
+            # query.addWhereIn(self._varTypeInTable, [self._lab_var])
+            #
+            # if self._isLabPanel:
+            #
+            #     query.addSelect("SUM(CASE WHEN result_in_range_yn IN ('N', 'Y') THEN 1 ELSE 0 END) AS num_components")
+            #     query.addSelect("SUM(CASE WHEN result_in_range_yn = 'Y' THEN 1 ELSE 0 END) AS num_normal_components")
+            #     query.addSelect("CAST(SUM(CASE WHEN result_in_range_yn = 'N' THEN 1 ELSE 0 END) = 0 AS INT) AS all_components_normal") #TODO
+            # else:
+            #     query.addSelect("CASE WHEN result_in_range_yn = 'Y' THEN 1 ELSE 0 END AS component_normal")
+            #
+            # query.addFrom('labs')
+            # query.addWhereIn("pat_id", random_patient_list)
+            #
+            # query.addGroupBy('pat_id')
+            # query.addGroupBy('order_proc_id')
+            # query.addGroupBy(self._varTypeInTable)
+            # query.addGroupBy('order_time')
+            #
+            # query.addOrderBy('pat_id')
+            # query.addOrderBy('order_proc_id')
+            # query.addOrderBy(self._varTypeInTable)
+            # query.addOrderBy('order_time')
+            #
+            # query.setLimit(self._num_requested_episodes)
+            #
+            # print query
 
-            query.addWhereIn(self._varTypeInTable, [self._lab_var])
+            query_str = "SELECT CAST(pat_id AS BIGINT) AS pat_id, order_proc_id, base_name, order_time, "
+            query_str += "CASE WHEN result_in_range_yn = 'Y' THEN 1 ELSE 0 END AS component_normal "
+            query_str += "FROM labs "
+            query_str += "WHERE base_name = '%s' "%self._lab_var
+            query_str += "AND pat_id IN "
+            pat_list_str = "("
+            for pat_id in random_patient_list:
+                pat_list_str += str(pat_id) + ","
+            pat_list_str = pat_list_str[:-1] + ") "
+            query_str += pat_list_str
+            query_str += "GROUP BY pat_id, order_proc_id, base_name, order_time "
+            query_str += "ORDER BY pat_id, order_proc_id, base_name, order_time "
+            query_str += "LIMIT %d"%self._num_requested_episodes
 
-            if self._isLabPanel:
+            self._num_reported_episodes = FeatureMatrix._querystr_patient_episodes(self, query_str,
+                                                                                index_time_col='order_time')
 
-                query.addSelect("SUM(CASE WHEN result_in_range_yn IN ('N', 'Y') THEN 1 ELSE 0 END) AS num_components")
-                query.addSelect("SUM(CASE WHEN result_in_range_yn = 'Y' THEN 1 ELSE 0 END) AS num_normal_components")
-                query.addSelect("CAST(SUM(CASE WHEN result_in_range_yn = 'N' THEN 1 ELSE 0 END) = 0 AS INT) AS lab_normal") #TODO
-            else:
-                query.addSelect("CASE WHEN result_in_range_yn = 'Y' THEN 0 ELSE 1 END AS abnormal_lab")
-
-            query.addFrom('labs')
-            query.addWhereIn("pat_id", random_patient_list)
-
-            query.addGroupBy('pat_id')
-            query.addGroupBy('order_proc_id')
-            query.addGroupBy(self._varTypeInTable)
-            query.addGroupBy('order_time')
-
-            query.addOrderBy('pat_id')
-            query.addOrderBy('order_proc_id')
-            query.addOrderBy(self._varTypeInTable)
-            query.addOrderBy('order_time')
-
-        query.setLimit(self._num_requested_episodes)
-
-        self._num_reported_episodes = FeatureMatrix._query_patient_episodes(self, query, index_time_col='order_time')
 
     def _add_features(self):
         # Add lab panel order features.

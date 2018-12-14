@@ -115,7 +115,7 @@ class FeatureMatrixFactory:
         self._pipeDbCursorToTsvFile(self.patientListInput, patientListTempFile)
         patientListTempFile.close()
 
-    def _pipeDbCursorToTsvFile(self, dbCursor, tsvFile):
+    def _pipeDbCursorToTsvFile(self, dbCursor, tsvFile, include_columns=True):
         """
         Pipe any arbitrary DB cursor to a TSV file.
         """
@@ -123,11 +123,12 @@ class FeatureMatrixFactory:
         columns = dbCursor.description
         numColumns = len(columns)
 
-        # Write TSV header.
-        for i in range(numColumns - 1):
-            # 0th index is column name.
-            tsvFile.write("%s\t" % columns[i][0])
-        tsvFile.write("%s\n" % columns[numColumns - 1][0])
+        if include_columns:
+            # Write TSV header.
+            for i in range(numColumns - 1):
+                # 0th index is column name.
+                tsvFile.write("%s\t" % columns[i][0])
+            tsvFile.write("%s\n" % columns[numColumns - 1][0])
 
         # By default, cursor iterates through both header and data rows.
         self._numRows = 0
@@ -399,25 +400,60 @@ class FeatureMatrixFactory:
         # clinicalItemCategory can be column names like proc_code, birth, sex,
         # clinicalItemTime can be column names like order_time, birth, birth ...
 
-        query = SQLQuery()
-        query.addSelect('CAST(pat_id AS BIGINT) AS pat_id')
-        # query.addSelect('pat_id')
+        # query = SQLQuery()
+        # query.addSelect('CAST(pat_id AS BIGINT) AS pat_id')
+        # # query.addSelect('pat_id')
+        #
+        # query.addFrom(tableName)
+        # if clinicalItemType:
+        #     query.addWhereIn(clinicalItemType, clinicalItemNames)
+        # # else:
+        # #     query.addWhereIn(clinicalItemCategory, clinicalItemNames)
+        # query.addWhereIn('pat_id', patientIds)
+        # query.addGroupBy('pat_id') # TODO? should I use this?
+        # query.addOrderBy('pat_id')
+        # if clinicalItemTime: # demographic info does not have a time
+        #     query.addSelect(clinicalItemTime)
+        #     query.addGroupBy(clinicalItemTime)
+        #     query.addOrderBy(clinicalItemTime)
+        #
+        # print query
+        # results = DBUtil.execute(query)
 
-        query.addFrom(tableName)
+
+        query_str = "SELECT CAST(pat_id AS BIGINT) AS pat_id "
+        if clinicalItemTime:
+            query_str += ", %s "%clinicalItemTime
+
+        query_str += "FROM %s "%tableName
+
         if clinicalItemType:
-            query.addWhereIn(clinicalItemType, clinicalItemNames)
-        # else:
-        #     query.addWhereIn(clinicalItemCategory, clinicalItemNames)
-        query.addWhereIn('pat_id', patientIds)
-        query.addGroupBy('pat_id') # TODO? should I use this?
-        query.addOrderBy('pat_id')
-        if clinicalItemTime: # demographic info does not have a time
-            query.addSelect(clinicalItemTime)
-            query.addGroupBy(clinicalItemTime)
-            query.addOrderBy(clinicalItemTime)
+            query_str += "WHERE %s IN ("%(clinicalItemType)
+            for clinicalItemName in clinicalItemNames:
+                query_str += "'%s',"%clinicalItemName
+            query_str = query_str[:-1] + ") AND "
+        else:
+            query_str += "WHERE "
 
-        results = DBUtil.execute(query)
-        componentItemEvents = [row for row in results]
+        query_str += "pat_id IN "
+        pat_list_str = "("
+        for pat_id in patientIds:
+            pat_list_str += str(pat_id) + ","
+        pat_list_str = pat_list_str[:-1] + ") "
+        query_str += pat_list_str
+        query_str += "GROUP BY pat_id "
+        if clinicalItemTime:
+            query_str += ", %s "%clinicalItemTime
+
+        query_str += "ORDER BY pat_id "
+        if clinicalItemTime:
+            query_str += ", %s " % clinicalItemTime
+
+        results = DBUtil.connection().cursor().execute(query_str).fetchall()
+        # print results
+
+        componentItemEvents = [list(row) for row in results]
+        # print componentItemEvents
 
         if not clinicalItemTime:
             componentItemEvents = [x + [datetime.datetime(1900,1,1)] for x in componentItemEvents]
@@ -475,13 +511,54 @@ class FeatureMatrixFactory:
         query.addOrderBy("pat_id")
         query.addOrderBy(label)
 
+        # results = DBUtil.execute(query)
 
-        results = DBUtil.execute(query)
-
-        clinicalItemEvents = [row for row in results]
+        # clinicalItemEvents = [row for row in results]
 
         # print clinicalItemEvents
         # quit()
+
+
+
+        query_str = "SELECT %s, %s "%(self._patientItemIdColumn, self._patientItemTimeColumn)
+        # if clinicalItemTime:
+        #     query_str += ", %s " % clinicalItemTime
+
+        query_str += " FROM %s "%tableName
+
+        # if clinicalItemType:
+        #     query_str += "WHERE %s IN (" % (clinicalItemType)
+        #     for clinicalItemName in clinicalItemNames:
+        #         query_str += "'%s'," % clinicalItemName
+        #     query_str = query_str[:-1] + ") "
+
+        query_str += "WHERE pat_id IN "
+        pat_list_str = "("
+        for pat_id in patientIds:
+            pat_list_str += str(pat_id) + ","
+        pat_list_str = pat_list_str[:-1] + ") "
+        query_str += pat_list_str
+
+        # query_str += "GROUP BY pat_id "
+        # if clinicalItemTime:
+        #     query_str += ", %s " % clinicalItemTime
+
+        query_str += "ORDER BY pat_id, %s "%label
+        # if clinicalItemTime:
+        #     query_str += ", %s " % clinicalItemTime
+        print query_str
+
+        results = DBUtil.connection().cursor().execute(query_str).fetchall()
+        # print results
+
+        clinicalItemEvents = [list(row) for row in results]
+        # print componentItemEvents
+
+        # if not clinicalItemTime:
+        #     componentItemEvents = [x + [datetime.datetime(1900, 1, 1)] for x in componentItemEvents]
+        #
+        # return componentItemEvents
+
         return clinicalItemEvents
 
 
@@ -1013,28 +1090,74 @@ class FeatureMatrixFactory:
             patientIds.add(episode[self.patientEpisodeIdColumn])
 
         # Construct query to pull from stride_order_results, stride_order_proc
-        query = SQLQuery()
+        # query = SQLQuery()
+        # for column in columnNames:
+        #     query.addSelect(column)
+        # if LocalEnv.DATASET_SOURCE_NAME == 'STRIDE':
+        #     query.addFrom("stride_order_results AS sor, stride_order_proc AS sop")
+        #     query.addWhere("sor.order_proc_id = sop.order_proc_id")
+        # elif LocalEnv.DATASET_SOURCE_NAME == 'UMich':
+        #     query.addFrom("labs")
+        # if isLabPanel:
+        #     labProcCodes = labNames
+        #     query.addWhereIn("proc_code", labProcCodes)
+        # else:
+        #     labBaseNames = labNames
+        #     query.addWhereIn("base_name", labBaseNames)
+        # query.addWhereIn("pat_id", patientIds)
+        # query.addOrderBy("pat_id")
+        # if LocalEnv.DATASET_SOURCE_NAME == 'STRIDE':
+        #     query.addOrderBy("sor.result_time")
+        # elif LocalEnv.DATASET_SOURCE_NAME == 'UMich':
+        #     query.addOrderBy("result_time")
+        # log.debug(query)
+        #
+        # print query
+        # res = DBUtil.execute(query, includeColumnNames=True)
+
+
+        query_str = "SELECT "
         for column in columnNames:
-            query.addSelect(column)
-        if LocalEnv.DATASET_SOURCE_NAME == 'STRIDE':
-            query.addFrom("stride_order_results AS sor, stride_order_proc AS sop")
-            query.addWhere("sor.order_proc_id = sop.order_proc_id")
-        elif LocalEnv.DATASET_SOURCE_NAME == 'UMich':
-            query.addFrom("labs")
+            query_str += column + ","
+        query_str = query_str[:-1] + " FROM labs "
+
         if isLabPanel:
-            labProcCodes = labNames
-            query.addWhereIn("proc_code", labProcCodes)
+            clinicalItemType = 'proc_code'
         else:
-            labBaseNames = labNames
-            query.addWhereIn("base_name", labBaseNames)
-        query.addWhereIn("pat_id", patientIds)
-        query.addOrderBy("pat_id")
+            clinicalItemType = 'base_name'
+
+        query_str += "WHERE %s IN (" % (clinicalItemType)
+        for labName in labNames:
+            query_str += "'%s'," % labName
+        query_str = query_str[:-1] + ") "
+
+        query_str += "AND pat_id IN "
+        pat_list_str = "("
+        for pat_id in patientIds:
+            pat_list_str += str(pat_id) + ","
+        pat_list_str = pat_list_str[:-1] + ") "
+        query_str += pat_list_str
+
+        query_str += "ORDER BY pat_id"
         if LocalEnv.DATASET_SOURCE_NAME == 'STRIDE':
-            query.addOrderBy("sor.result_time")
+            query_str += ", sor.result_time"
         elif LocalEnv.DATASET_SOURCE_NAME == 'UMich':
-            query.addOrderBy("result_time")
-        log.debug(query)
-        return modelListFromTable(DBUtil.execute(query, includeColumnNames=True))
+            query_str += ", result_time"
+
+        cur = DBUtil.connection().cursor()
+        cur.execute(query_str)
+
+        res = []
+        colNames = DBUtil.columnNamesFromCursor(cur)
+        res.append(colNames)
+        #DBUtil.execute(query_str, includeColumnNames=True)
+
+        dataTable = list(cur.fetchall())
+        for i, row in enumerate(dataTable):
+            dataTable[i] = list(row);
+            res.extend(dataTable);
+
+        return modelListFromTable(res)
 
     def _parseResultsData(self, resultRowIter, patientIdCol, nameCol, valueCol, datetimeCol):
         """

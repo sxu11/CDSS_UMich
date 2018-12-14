@@ -23,11 +23,12 @@ def remove_microsecs(any_str):
 
 def line_str2list(line_str, skip_first_col=False):
     # Get rid of extra quotes
-    if skip_first_col:
-        # get rid of meaningless first col index
-        return [x.strip()[1:-1] for x in line_str.split('|')][1:]
-    else:
-        return [x.strip()[1:-1] for x in line_str.split('|')]
+    # if skip_first_col:
+    #     # get rid of meaningless first col index
+    #     return [x.strip()[1:-1] for x in line_str.split('|')][1:]
+    # else:
+    #     return [x.strip()[1:-1] for x in line_str.split('|')]
+    return [x.strip() for x in line_str.split('\t')]
 
 import numpy as np
 import random, string
