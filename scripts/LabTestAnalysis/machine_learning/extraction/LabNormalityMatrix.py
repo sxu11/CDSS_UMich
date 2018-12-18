@@ -131,7 +131,8 @@ class LabNormalityMatrix(FeatureMatrix):
         if len(order_counts) == 0:
             error_msg = '0 orders for lab "%s."' % self._lab_var
             log.critical(error_msg)
-            sys.exit('[ERROR] %s' % error_msg)
+            raise Exception(error_msg)
+            # sys.exit('[ERROR] %s' % error_msg) # sxu: sys.exit cannot be caught by Exception
         else:
             return numpy.median(order_counts)
 

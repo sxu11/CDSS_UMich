@@ -319,11 +319,11 @@ if __name__ == '__main__':
         batch_mode = False
 
         if not batch_mode:
-            UMICH_TOP_COMPONENTS = ['WBC', 'HGB', 'PLT', 'SOD', 'POT',  # TODO: confirm again
-                                    'CREAT', 'TBIL',
-                                    'CHLOR', 'CO2', 'DBIL', 'AST', 'ALT',
-                                    'ALB', 'CAL', 'PCOAA2', 'PO2AA', 'pHA',
-                                    'T PROTEIN',
+            UMICH_TOP_COMPONENTS = [#'WBC', 'HGB', 'PLT', 'SOD', 'POT',  # TODO: confirm again
+                                    #'CREAT', 'TBIL',
+                                    #'CHLOR', 'CO2', 'DBIL', 'AST', 'ALT',
+                                    #'ALB', 'CAL', 'PCOAA2', 'PO2AA', 'pHA',
+                                    #'T PROTEIN',
                                     'ALK',  # ALKALINE PHOSPHATASE
                                     'UN',  # Blood, Urine, 'BUN'
                                     'IBIL',  # Bilirubin, Indirect
