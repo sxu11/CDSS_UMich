@@ -1155,7 +1155,7 @@ class FeatureMatrixFactory:
         dataTable = list(cur.fetchall())
         for i, row in enumerate(dataTable):
             dataTable[i] = list(row);
-            res.extend(dataTable);
+        res.extend(dataTable);
 
         return modelListFromTable(res)
 
@@ -1354,8 +1354,11 @@ class FeatureMatrixFactory:
                                              label="Comorbidity." + disease, features=features)
             elif LocalEnv.DATASET_SOURCE_NAME == 'UMich':
                 self.addClinicalItemFeatures_UMich(icd9prefixes, 
-                                        tableName = 'diagnoses', clinicalItemType='diagnose_code', clinicalItemTime='diagnose_time',
-                                        label="Comorbidity."+disease, features=features)
+                                                   tableName = 'diagnoses',
+                                                   clinicalItemType='diagnose_code',
+                                                   clinicalItemTime='diagnose_time',
+                                                   label="Comorbidity."+disease,
+                                                   features=features)
 
     def addTreatmentTeamFeatures(self, features=None):
         """
