@@ -35,7 +35,14 @@ def prepare_database(raw_data_files, raw_data_folderpath, db_name, fold_enlarge_
         data_folderpath = raw_data_folderpath
 
     for data_file in data_files:
-        utils_UMich.raw2db(data_file, data_folderpath, db_path=raw_data_folderpath, db_name=db_name, build_index_patid=True)
+        if 'encounters' in data_file:
+            all_included_order_proc_ids = utils_UMich.raw2db(data_file, data_folderpath, db_path=raw_data_folderpath, db_name=db_name, build_index_patid=True)
+        elif 'labs' in data_file:
+            utils_UMich.raw2db(data_file, data_folderpath, db_path=raw_data_folderpath, db_name=db_name,
+                               build_index_patid=True, collected_included_order_proc_ids=all_included_order_proc_ids)
+        else:
+            utils_UMich.raw2db(data_file, data_folderpath, db_path=raw_data_folderpath, db_name=db_name,
+                               build_index_patid=True)
 
 
 if __name__ == '__main__':

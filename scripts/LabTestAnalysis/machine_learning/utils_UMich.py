@@ -4,7 +4,7 @@ import sqlite3
 import LocalEnv
 from medinfo.common.Util import log
 
-test_mode = False
+test_mode = True
 
 
 def filter_nondigits(any_str):
@@ -158,7 +158,7 @@ from medinfo.db import DBUtil
 time_min = '2015-01-01'
 
 
-def pd_process_labs(labs_df):
+def pd_process_labs(labs_df, order_proc_ids_to_include=None):
     # print labs_df.columns
     labs_df = labs_df.rename(columns={'PatientID': 'pat_id',
                                       'EncounterID': 'order_proc_id',
@@ -169,9 +169,9 @@ def pd_process_labs(labs_df):
                                       'RANGE': 'normal_range',
                                       'HILONORMAL_FLAG': 'result_flag'
                                       })
+    if order_proc_ids_to_include: # for including only inpatients
+        labs_df = labs_df[labs_df['order_proc_id'].isin(order_proc_ids_to_include)]
 
-    # fileter out earlier data
-    # print labs_df.columns
     labs_df = labs_df[labs_df['result_time'] > time_min]  # DBUtil.datetime()
     # labs_df = labs_df[labs_df[]]
 
@@ -238,11 +238,11 @@ def pd_process_demographics(demographics_df):
     demographics_df['RaceName'] = demographics_df['RaceName'].apply(lambda x: x.replace("/", "-"))
     return demographics_df[['pat_id', 'GenderName', 'RaceName']]
 
-def pd2db(data_df, db_path, table_name, db_name):
+def pd2db(data_df, db_path, table_name, db_name, order_proc_ids_to_include=None):
     conn = sqlite3.connect(db_path + '/' + db_name)
 
     if table_name == "labs":  #
-        data_df = pd_process_labs(data_df)
+        data_df = pd_process_labs(data_df, order_proc_ids_to_include)
     elif table_name == "pt_info":
         data_df = pd_process_pt_info(data_df)
     elif table_name == "encounters":
@@ -256,7 +256,10 @@ def pd2db(data_df, db_path, table_name, db_name):
 
     data_df.to_sql(table_name, conn, if_exists="append")
 
-def raw2db(data_file, data_folderpath, db_path, db_name, build_index_patid=True):
+    if table_name == 'encounters':
+        return data_df['order_proc_id'].values.tolist()
+
+def raw2db(data_file, data_folderpath, db_path, db_name, build_index_patid=True, collected_included_order_proc_ids=None):
     chunk_size = 100000  # num of rows
 
     print 'Now writing %s into database...' % data_file  #
@@ -265,6 +268,10 @@ def raw2db(data_file, data_folderpath, db_path, db_name, build_index_patid=True)
     table_name = table_name.replace(".sample", "")
     table_name = table_name.replace(".large", "")
     table_name = table_name.replace('.', '_')  # pt.info
+
+    if table_name == 'encounters':
+        all_included_order_proc_ids = []
+
     with open(data_folderpath + '/' + data_file) as f:
         is_first_chunk = True
         while True:
@@ -282,10 +289,21 @@ def raw2db(data_file, data_folderpath, db_path, db_name, build_index_patid=True)
                 data_df = lines2pd(next_n_lines_str, colnames)
 
             ## append each pandas to db tables
-            pd2db(data_df, db_path=db_path, db_name=db_name, table_name=table_name)
+            if table_name == 'encounters':
+                cur_included_order_proc_ids = pd2db(data_df, db_path=db_path, db_name=db_name, table_name=table_name)
+                all_included_order_proc_ids += cur_included_order_proc_ids
+            elif table_name == 'labs':
+                print collected_included_order_proc_ids
+                pd2db(data_df, db_path=db_path, db_name=db_name, table_name=table_name,
+                      order_proc_ids_to_include=collected_included_order_proc_ids)
+            else:
+                pd2db(data_df, db_path=db_path, db_name=db_name, table_name=table_name)
             ##
     if build_index_patid:
         conn = sqlite3.connect(db_path + '/' + db_name)
         build_index_query = "CREATE INDEX IF NOT EXISTS index_for_%s ON %s (%s);" % (table_name, table_name, 'pat_id')
         # print build_index_query
         conn.execute(build_index_query)
+
+    if table_name == 'encounters':
+        return set(all_included_order_proc_ids)

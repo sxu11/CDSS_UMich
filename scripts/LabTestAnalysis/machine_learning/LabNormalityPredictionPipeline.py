@@ -319,11 +319,11 @@ if __name__ == '__main__':
         batch_mode = False
 
         if not batch_mode:
-            UMICH_TOP_COMPONENTS = [#'WBC', 'HGB', 'PLT', 'SOD', 'POT',  # TODO: confirm again
-                                    #'CREAT', 'TBIL',
-                                    #'CHLOR', 'CO2', 'DBIL', 'AST', 'ALT',
-                                    #'ALB', 'CAL', 'PCOAA2', 'PO2AA', 'pHA',
-                                    #'T PROTEIN',
+            UMICH_TOP_COMPONENTS = ['WBC', 'HGB', 'PLT', 'SOD', 'POT',  # TODO: confirm again
+                                    'CREAT', 'TBIL',
+                                    'CHLOR', 'CO2', 'DBIL', 'AST', 'ALT',
+                                    'ALB', 'CAL', 'PCOAA2', 'PO2AA', 'pHA',
+                                    'T PROTEIN',
                                     'ALK',  # ALKALINE PHOSPHATASE
                                     'UN',  # Blood, Urine, 'BUN'
                                     'IBIL',  # Bilirubin, Indirect
@@ -337,9 +337,9 @@ if __name__ == '__main__':
             import sys
             UMICH_TOP_COMPONENTS = [sys.argv[1]]
         # By default, the first one should be labs
-        raw_data_files = ['labs.txt',
+        raw_data_files = ['encounters.txt',
+                        'labs.txt',
                           'pt.info.txt',
-                          'encounters.txt',
                           'demographics.txt',
                           'diagnoses.txt']
 
@@ -347,7 +347,7 @@ if __name__ == '__main__':
         db_name = LocalEnv.LOCAL_PROD_DB_PARAM["DSN"]
         # prepareData_UMich.prepare_database(raw_data_files, raw_data_folderpath, db_name=db_name)
         fold_enlarge_data = 1
-        USE_CACHED_DB = True # TODO: take care of USE_CACHED_LARGEFILE in the future
+        USE_CACHED_DB = False # TODO: take care of USE_CACHED_LARGEFILE in the future
         prepareData_UMich.prepare_database(raw_data_files, raw_data_folderpath, db_name=db_name, fold_enlarge_data=fold_enlarge_data, USE_CACHED_DB=USE_CACHED_DB)
 
         # for panel in UMICH_TOP_LABPANELS:
