@@ -185,13 +185,15 @@ class LabNormalityMatrix(FeatureMatrix):
             query_str += "COUNT(order_proc_id) AS num_orders "
             query_str += "FROM labs "
             #query_str += " WHERE %s IN (%s) "%(self._varTypeInTable, self._lab_var)
-            query_str += "WHERE base_name == '%s' "%self._lab_var
+            query_str += "WHERE %s = '%s' "%(self._varTypeInTable, self._lab_var)
             if self.notUsePatIds:
                 query_str += "AND pat_id NOT IN ("
                 for pat_id in self.notUsePatIds:
                     query_str += "%s,"%pat_id
                 query_str = query_str[:-1] + ") " # get rid of comma
             query_str += "GROUP BY pat_id"
+
+            print query_str
 
             log.debug('Querying median orders per patient...')
 
@@ -319,18 +321,22 @@ class LabNormalityMatrix(FeatureMatrix):
             #
             # print query
 
-            query_str = "SELECT CAST(pat_id AS BIGINT) AS pat_id, order_proc_id, base_name, order_time, "
-            query_str += "CASE WHEN result_in_range_yn = 'Y' THEN 1 ELSE 0 END AS component_normal "
+            query_str = "SELECT CAST(pat_id AS BIGINT) AS pat_id, order_proc_id, %s, order_time, "%self._varTypeInTable
+            if not self._isLabPanel:
+                query_str += "CASE WHEN result_in_range_yn = 'Y' THEN 1 ELSE 0 END AS component_normal "
+            else:
+                query_str += "CAST(SUM(CASE WHEN result_in_range_yn != 'Y' THEN 1 ELSE 0 END) = 0 AS INT) AS all_components_normal "
+            # query_str += "CASE WHEN result_in_range_yn = 'Y' THEN 1 ELSE 0 END AS component_normal "
             query_str += "FROM labs "
-            query_str += "WHERE base_name = '%s' "%self._lab_var
+            query_str += "WHERE %s = '%s' "%(self._varTypeInTable, self._lab_var)
             query_str += "AND pat_id IN "
             pat_list_str = "("
             for pat_id in random_patient_list:
                 pat_list_str += str(pat_id) + ","
             pat_list_str = pat_list_str[:-1] + ") "
             query_str += pat_list_str
-            query_str += "GROUP BY pat_id, order_proc_id, base_name, order_time "
-            query_str += "ORDER BY pat_id, order_proc_id, base_name, order_time "
+            query_str += "GROUP BY pat_id, order_proc_id, %s, order_time "%self._varTypeInTable
+            query_str += "ORDER BY pat_id, order_proc_id, %s, order_time "%self._varTypeInTable
             query_str += "LIMIT %d"%self._num_requested_episodes
 
             self._num_reported_episodes = FeatureMatrix._querystr_patient_episodes(self, query_str,
