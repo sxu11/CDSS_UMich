@@ -4,7 +4,7 @@ import sqlite3
 import LocalEnv
 from medinfo.common.Util import log
 
-test_mode = True
+test_mode = LocalEnv.TEST_MODE
 
 
 def filter_nondigits(any_str):
@@ -154,8 +154,10 @@ def construct_result_in_range_yn(df):
 
 
 from medinfo.db import DBUtil
-
-time_min = '2015-01-01'
+if test_mode:
+    time_min = '1900-01-01'
+else:
+    time_min = '2015-01-01'
 
 
 def pd_process_labs(labs_df, order_proc_ids_to_include=None):
@@ -169,7 +171,7 @@ def pd_process_labs(labs_df, order_proc_ids_to_include=None):
                                       'RANGE': 'normal_range',
                                       'HILONORMAL_FLAG': 'result_flag'
                                       })
-    if order_proc_ids_to_include: # for including only inpatients
+    if order_proc_ids_to_include and not test_mode: # for including only inpatients
         labs_df = labs_df[labs_df['order_proc_id'].isin(order_proc_ids_to_include)]
 
     labs_df = labs_df[labs_df['result_time'] > time_min]  # DBUtil.datetime()
@@ -222,6 +224,13 @@ def pd_process_diagnoses(diagnoses_df):
                  'TermCodeMapped': 'diagnose_code'})
 
     diagnoses_df = diagnoses_df[diagnoses_df['diagnose_time'] > time_min]
+
+    '''
+    For ICD9, map the whole code
+    For ICD10, only map the prefix
+    '''
+    diagnoses_df['diagnose_code'] = diagnoses_df[['diagnose_code', 'Lexicon']].apply(
+        lambda x: x['diagnose_code'].split('.')[0] if x['Lexicon']=='ICD10' else x['diagnose_code'], axis=1)# )
 
     diagnoses_df['pat_id'] = diagnoses_df['pat_id'].apply(lambda x: hash(x))
     diagnoses_df['diagnose_time'] = diagnoses_df['diagnose_time'].apply(lambda x: remove_microsecs(x))
@@ -293,7 +302,6 @@ def raw2db(data_file, data_folderpath, db_path, db_name, build_index_patid=True,
                 cur_included_order_proc_ids = pd2db(data_df, db_path=db_path, db_name=db_name, table_name=table_name)
                 all_included_order_proc_ids += cur_included_order_proc_ids
             elif table_name == 'labs':
-                print collected_included_order_proc_ids
                 pd2db(data_df, db_path=db_path, db_name=db_name, table_name=table_name,
                       order_proc_ids_to_include=collected_included_order_proc_ids)
             else:

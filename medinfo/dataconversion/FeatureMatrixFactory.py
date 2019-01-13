@@ -450,7 +450,6 @@ class FeatureMatrixFactory:
             query_str += ", %s " % clinicalItemTime
 
         results = DBUtil.connection().cursor().execute(query_str).fetchall()
-        # print results
 
         componentItemEvents = [list(row) for row in results]
         # print componentItemEvents
@@ -1345,6 +1344,18 @@ class FeatureMatrixFactory:
                 icd9prefixesByDisease[disease].append("^ICD9." + icd9prefix)
             elif LocalEnv.DATASET_SOURCE_NAME == 'UMich':
                 icd9prefixesByDisease[disease].append(icd9prefix)
+
+        '''
+        Temporary solution: 
+        For ICD9, map the whole code
+        For ICD10, only map the prefix
+        '''
+        if LocalEnv.DATASET_SOURCE_NAME == 'UMich':
+            for row in self.loadMapData("CharlsonComorbidity-ICD10"):
+                (disease, icd10prefix) = (row["charlson"], row["icd10"])
+                if disease not in icd9prefixesByDisease:
+                    icd9prefixesByDisease[disease] = list()
+                # icd9prefixesByDisease[disease].append(icd10prefix)
 
         for disease, icd9prefixes in icd9prefixesByDisease.iteritems():
             disease = disease.translate(None," ()-/") # Strip off punctuation
