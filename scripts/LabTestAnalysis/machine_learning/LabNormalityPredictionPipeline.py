@@ -315,7 +315,6 @@ if __name__ == '__main__':
             LabNormalityPredictionPipeline(panel, 1000, use_cache=True, random_state=123456789)
 
     elif LocalEnv.DATASET_SOURCE_NAME == 'UMich':
-        UMICH_TOP_LABPANELS = ['CBCP']
         batch_mode = False
 
         if not batch_mode:
@@ -352,9 +351,45 @@ if __name__ == '__main__':
 
         # for panel in UMICH_TOP_LABPANELS:
         #     LabNormalityPredictionPipeline(panel, 1000, use_cache=True, random_state=123456789, isLabPanel=True)
+
+        pat_batch_mode = True
+
+        UMICH_TOP_PANELS = [
+            'MAG',
+            'PHOS',
+            'PT7', #'PROTHROMBIN TIME',
+            'A1C',
+            'BLD',  # ADULT BLOOD CULTURE
+            'BLDAN',  # 'BLOOD CULTURE (ANA)'
+            'URIC',
+            'LACT',
+            'ESRA',  # Erythrocyte Sedimentation Rate, iSED
+            'ALB',
+            'TSH',
+            'TROP',
+            'POT',
+            'SOD',
+            'CAL'
+        ]
+
+        for panel in UMICH_TOP_PANELS:
+            print "processing %s..."%panel
+            try:
+                if not pat_batch_mode:
+                    LabNormalityPredictionPipeline(panel, 10000, use_cache=False, random_state=123456789, isLabPanel=True)
+                else:
+                    pat_batch_size = 500
+                    notUsePatIds = []
+                    for pat_batch_ind in range(10000/pat_batch_size): #10000
+                        cur_pipe = LabNormalityPredictionPipeline(panel, pat_batch_size, use_cache=False, random_state=123456789,
+                                                       isLabPanel=True, notUsePatIds=notUsePatIds, pat_batch_ind=pat_batch_ind)
+                        notUsePatIds += cur_pipe.usedPatIds
+            except Exception as e:
+                log.info(e)
+                pass
+
         for component in UMICH_TOP_COMPONENTS:
             print "processing %s..."%component
-            pat_batch_mode = True
             try:
                 if not pat_batch_mode:
                     LabNormalityPredictionPipeline(component, 10000, use_cache=False, random_state=123456789, isLabPanel=False)
@@ -368,6 +403,7 @@ if __name__ == '__main__':
             except Exception as e:
                 log.info(e)
                 pass
+
         log.info("\n"
                  "Congratz, pipelining completed! \n"
                  "All results and reports are stored in %s", folder_debug)

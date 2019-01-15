@@ -4,7 +4,7 @@ import sqlite3
 import LocalEnv
 from medinfo.common.Util import log
 
-test_mode = LocalEnv.TEST_MODE
+test_mode = False
 
 
 def filter_nondigits(any_str):
@@ -23,16 +23,16 @@ def remove_microsecs(any_str):
     except:
         return any_str
 
-def line_str2list(line_str, skip_first_col=False):
+def line_str2list(line_str):
     # Get rid of extra quotes
-    if test_mode:
-        if skip_first_col:
-            # get rid of meaningless first col index
-            return [x.strip()[1:-1] for x in line_str.split('|')][1:]
-        else:
-            return [x.strip()[1:-1] for x in line_str.split('|')]
-    else:
-        return [x.strip() for x in line_str.split('\t')]
+    # if test_mode:
+    #     if skip_first_col:
+    #         # get rid of meaningless first col index
+    #         return [x.strip()[1:-1] for x in line_str.split('|')][1:]
+    #     else:
+    #         return [x.strip()[1:-1] for x in line_str.split('|')]
+    # else:
+    return [x.strip() for x in line_str.split('\t')]
 
 import numpy as np
 import random, string
@@ -112,7 +112,7 @@ def lines2pd(lines_str, colnames):
 
     all_rows = []
     for line_str in lines_str:
-        curr_row = line_str2list(line_str, skip_first_col=True)
+        curr_row = line_str2list(line_str) #, skip_first_col=True
 
         if len(curr_row) < normal_num_cols / 2:  #
             # log.info('severely missing data when processing')

@@ -193,8 +193,6 @@ class LabNormalityMatrix(FeatureMatrix):
                 query_str = query_str[:-1] + ") " # get rid of comma
             query_str += "GROUP BY pat_id"
 
-            print query_str
-
             log.debug('Querying median orders per patient...')
 
             results = DBUtil.execute(query_str)
