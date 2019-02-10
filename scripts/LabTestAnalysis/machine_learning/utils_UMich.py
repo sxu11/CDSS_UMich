@@ -152,7 +152,6 @@ def construct_result_in_range_yn(df):
     # pd.testing.assert_series_equal(df['result_in_range_yn'], df_test['result_in_range_yn'])
     return df['result_in_range_yn']
 
-
 from medinfo.db import DBUtil
 if test_mode:
     time_min = '1900-01-01'
@@ -170,7 +169,8 @@ def pd_process_labs(labs_df, order_proc_ids_to_include=None):
                                       'VALUE': 'ord_num_value',
                                       'RANGE': 'normal_range',
                                       'HILONORMAL_FLAG': 'result_flag'
-                                      })
+                                      }
+                             )
     if order_proc_ids_to_include and not test_mode: # for including only inpatients
         labs_df = labs_df[labs_df['order_proc_id'].isin(order_proc_ids_to_include)]
 
@@ -185,18 +185,25 @@ def pd_process_labs(labs_df, order_proc_ids_to_include=None):
 
     labs_df = labs_df[labs_df['base_name'].map(lambda x: str(x) != '*')]
 
-    # Create redundant info to fit into CDSS pipeline
-    labs_df['result_in_range_yn'] = construct_result_in_range_yn(
-        labs_df[['ord_num_value', 'normal_range', 'result_flag']])
+    if labs_df.shape[0] == 0:
+        labs_df = pd.DataFrame(columns=['pat_id', 'order_proc_id', 'order_time', 'result_time',
+                                        'proc_code', 'base_name', 'ord_num_value', 'result_in_range_yn', 'result_flag'])
+        # labs_df['result_in_range_yn'] = labs_df['result_flag']
 
-    # Decision: use (a+b)/2 for the "a-b" range case
-    labs_df['ord_num_value'] = labs_df['ord_num_value'].apply(lambda x: filter_range(x) if '-' in x else x)
-    # Decision: use "0.1", "60" to handles cases like "<0.1", ">60" cases
-    labs_df['ord_num_value'] = labs_df['ord_num_value'].apply(lambda x: filter_nondigits(x))
+    else:
 
-    # Make 00:00:00.0000000000 (hr;min;sec) into 00:00:00 to allow CDSS parse later
-    labs_df['order_time'] = labs_df['order_time'].apply(lambda x: remove_microsecs(x))
-    labs_df['result_time'] = labs_df['result_time'].apply(lambda x: remove_microsecs(x))
+        # Create redundant info to fit into CDSS pipeline
+        labs_df['result_in_range_yn'] = construct_result_in_range_yn(
+            labs_df[['ord_num_value', 'normal_range', 'result_flag']])
+
+        # Decision: use (a+b)/2 for the "a-b" range case
+        labs_df['ord_num_value'] = labs_df['ord_num_value'].apply(lambda x: filter_range(x) if '-' in x else x)
+        # Decision: use "0.1", "60" to handles cases like "<0.1", ">60" cases
+        labs_df['ord_num_value'] = labs_df['ord_num_value'].apply(lambda x: filter_nondigits(x))
+
+        # Make 00:00:00.0000000000 (hr;min;sec) into 00:00:00 to allow CDSS parse later
+        labs_df['order_time'] = labs_df['order_time'].apply(lambda x: remove_microsecs(x))
+        labs_df['result_time'] = labs_df['result_time'].apply(lambda x: remove_microsecs(x))
 
     return labs_df[['pat_id', 'order_proc_id', 'order_time', 'result_time',
                     'proc_code', 'base_name', 'ord_num_value', 'result_in_range_yn', 'result_flag']]
